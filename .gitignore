@@ -24,6 +24,7 @@ id_ed25519
 ssh_config
 *.kubeconfig
 *.json  # if token-bearing (AWS/GCP/Azure creds etc.)
+cookies.txt
 
 # Inventories you don’t want public
 inventories/prod/
