@@ -1,0 +1,31 @@
+# Python / tooling
+__pycache__/
+.venv/
+*.pyc
+.pytest_cache/
+.tox/
+.molecule/
+
+# Ansible
+collections/ansible_collections/
+*.retry
+
+# Secrets & local-only
+.env
+.env.*
+*.vault-pass
+vault_password.txt
+*.pem
+*.key
+*.crt
+*.creds
+id_rsa
+id_ed25519
+ssh_config
+*.kubeconfig
+*.json  # if token-bearing (AWS/GCP/Azure creds etc.)
+
+# Inventories you don’t want public
+inventories/prod/
+inventories/*/host_vars/*/secrets.yml
+inventories/*/group_vars/*/secrets.yml
