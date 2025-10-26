@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "ansible: venv",   "type": "shell", "command": "make venv" },
+    { "label": "ansible: galaxy", "type": "shell", "command": "make galaxy", "dependsOn": ["ansible: venv"] },
+    { "label": "ansible: lint",   "type": "shell", "command": "make lint",   "dependsOn": ["ansible: venv","ansible: galaxy"] },
+    { "label": "ansible: check",  "type": "shell", "command": "make check",  "dependsOn": ["ansible: venv","ansible: galaxy"] },
+    { "label": "ansible: run",    "type": "shell", "command": "make run",    "dependsOn": ["ansible: venv","ansible: galaxy"] },
+    { "label": "ansible: ping",   "type": "shell", "command": "make ping",   "dependsOn": ["ansible: venv","ansible: galaxy"] }
+  ]
+}
