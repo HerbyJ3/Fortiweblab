@@ -1,0 +1,19 @@
+---
+- name: FortiWeb/OS status summary (DEV)
+  hosts: fortiweb_dev
+  gather_facts: no
+  vars:
+    vdom: "{{ vdom | default('root') }}"
+  tasks:
+    - name: Get system status
+      fortinet.fortios.fortios_system_status:
+        access_token: "{{ forti_token }}"
+        vdom: "{{ vdom }}"
+      register: sys
+
+    - name: Summarize
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          mgmt_ip: "{{ ansible_host }}"
+          hostname: "{{ sys.meta.results.hostname | default('unknown') }}"
