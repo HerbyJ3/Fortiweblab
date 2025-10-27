@@ -1,0 +1,3 @@
+ansible-core>=2.14.0
+ansible-lint>=6.14.3
+jmespath>=1.0.1
