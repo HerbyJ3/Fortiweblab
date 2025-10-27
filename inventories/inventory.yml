@@ -4,8 +4,7 @@ all:
       hosts:
         Fortiweb7:
           ansible_host: 192.168.254.160
-          ansible_user: "admin"
-          ansible_password: "test1234"  # or put plain text for lab only
+          # credentials moved to group_vars/fortilab.yml (encrypted with ansible-vault)
           ansible_network_os: fortinet.fortiweb.fwebos
           ansible_connection: httpapi
           ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
