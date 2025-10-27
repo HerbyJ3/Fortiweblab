@@ -1,11 +1,18 @@
 all:
   children:
-    fortilab:
+    fortiweb:
       hosts:
         Fortiweb7:
           ansible_host: 192.168.254.160
-          # credentials moved to group_vars/fortilab.yml (encrypted with ansible-vault)
           ansible_network_os: fortinet.fortiweb.fwebos
           ansible_connection: httpapi
-          ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+          ansible_httpapi_use_ssl: true
+          ansible_httpapi_validate_certs: false
+          ansible_user: admin  # move to vault or env vars in production
+          ansible_password: "{{ vault_fortiweb_password }}"
+          fortiweb_api_key: "{{ vault_fortiweb_api_key }}"
+          fortiweb_vdom: root
+    fortilab:
+      children:
+        fortiweb: {}
         

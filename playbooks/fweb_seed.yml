@@ -1,0 +1,214 @@
+---
+- name: Seed FortiWeb test configuration
+  hosts: fortiweb
+  gather_facts: no
+  collections:
+    - fortinet.fortiweb
+  vars:
+    default_policy_count: 10
+    default_vserver_pool_count: 10
+    default_profile_count: 10
+    default_vdom: root
+    test_prefix: "TEST_"
+    default_threat_weight: informational
+    default_pool_type: reverse-proxy
+    default_policy_protocol: HTTP
+    default_policy_ssl: disable
+    default_policy_monitor_mode: enable
+    default_policy_web_profile: "Inline Standard Protection"
+    pool_comment: "Automation seed pool"
+    policy_comment: "Automation seed policy"
+    dummy_backend_port: 8080
+    dummy_backend_status: disable
+    dummy_backend_ip_base: "192.0.2"
+
+  pre_tasks:
+    - name: Derive seeding parameters
+      ansible.builtin.set_fact:
+        seed_vdom: "{{ fortiweb_vdom | default(vdom, true) | default(default_vdom, true) }}"
+        profile_total: "{{ (profile_count | default(default_profile_count, true)) | int }}"
+        pool_total: "{{ (vserver_pool_count | default(default_vserver_pool_count, true)) | int }}"
+        policy_total: "{{ (policy_count | default(default_policy_count, true)) | int }}"
+
+    - name: Validate requested object counts
+      ansible.builtin.assert:
+        that:
+          - (profile_total | int) > 0
+          - (pool_total | int) > 0
+          - (policy_total | int) > 0
+        quiet: true
+
+    - name: Determine seed action
+      ansible.builtin.set_fact:
+        seed_action: "{{ 'rollback' if ('rollback' in ansible_run_tags) else 'deploy' }}"
+
+    - name: Summarise planned seed operation
+      ansible.builtin.debug:
+        msg:
+          action: "{{ seed_action }}"
+          check_mode: "{{ ansible_check_mode }}"
+          policies: "{{ policy_total }}"
+          virtual_servers: "{{ pool_total }}"
+          server_pools: "{{ pool_total }}"
+          protection_profiles: "{{ profile_total }}"
+      when: ansible_check_mode
+
+  tasks:
+    - name: Create TEST web protection profiles
+      when:
+        - not ansible_check_mode
+        - seed_action == 'deploy'
+      tags: ['seed', 'deploy']
+      fortinet.fortiweb.fwebos_waf_custom_policy:
+        action: add
+        name: "{{ test_prefix }}PROFILE_{{ '%03d' % profile_index }}"
+        vdom: "{{ seed_vdom }}"
+        threat_weight: "{{ default_threat_weight }}"
+      loop: "{{ range(1, (profile_total | int) + 1) | list }}"
+      loop_control:
+        loop_var: profile_index
+        label: "{{ test_prefix }}PROFILE_{{ '%03d' % profile_index }}"
+
+    - name: Create TEST server pools
+      when:
+        - not ansible_check_mode
+        - seed_action == 'deploy'
+      tags: ['seed', 'deploy']
+      fortinet.fortiweb.fwebos_server_pool:
+        action: add
+        name: "{{ test_prefix }}POOL_{{ '%03d' % pool_index }}"
+        vdom: "{{ seed_vdom }}"
+        type: "{{ default_pool_type }}"
+        server_balance: disable
+        lb_algo: round-robin
+        comment: "{{ pool_comment }}"
+      loop: "{{ range(1, (pool_total | int) + 1) | list }}"
+      loop_control:
+        loop_var: pool_index
+        label: "{{ test_prefix }}POOL_{{ '%03d' % pool_index }}"
+
+    - name: Create dummy members for TEST server pools
+      when:
+        - not ansible_check_mode
+        - seed_action == 'deploy'
+      tags: ['seed', 'deploy']
+      fortinet.fortiweb.fwebos_server_pool_rule:
+        action: add
+        table_name: "{{ test_prefix }}POOL_{{ '%03d' % pool_index }}"
+        vdom: "{{ seed_vdom }}"
+        server_type: physical
+        ip: "{{ dummy_backend_ip_base }}.{{ pool_index }}"
+        port: "{{ dummy_backend_port }}"
+        status: "{{ dummy_backend_status }}"
+      loop: "{{ range(1, (pool_total | int) + 1) | list }}"
+      loop_control:
+        loop_var: pool_index
+        label: "{{ test_prefix }}POOL_{{ '%03d' % pool_index }}"
+
+    - name: Create TEST virtual servers
+      when:
+        - not ansible_check_mode
+        - seed_action == 'deploy'
+      tags: ['seed', 'deploy']
+      fortinet.fortiweb.fwebos_virtual_server:
+        action: add
+        name: "{{ test_prefix }}VSERVER_{{ '%03d' % vserver_index }}"
+        vdom: "{{ seed_vdom }}"
+      loop: "{{ range(1, (pool_total | int) + 1) | list }}"
+      loop_control:
+        loop_var: vserver_index
+        label: "{{ test_prefix }}VSERVER_{{ '%03d' % vserver_index }}"
+
+    - name: Create TEST server policies
+      when:
+        - not ansible_check_mode
+        - seed_action == 'deploy'
+      tags: ['seed', 'deploy']
+      fortinet.fortiweb.fwebos_server_policy:
+        action: add
+        name: "{{ test_prefix }}POLICY_{{ '%03d' % policy_index }}"
+        vdom: "{{ seed_vdom }}"
+        deployment_mode: server-pool
+        protocol: "{{ default_policy_protocol }}"
+        ssl: "{{ default_policy_ssl }}"
+        monitor_mode: "{{ default_policy_monitor_mode }}"
+        server_pool: "{{ test_prefix }}POOL_{{ '%03d' % (((policy_index - 1) % (pool_total | int)) + 1) }}"
+        vserver: "{{ test_prefix }}VSERVER_{{ '%03d' % (((policy_index - 1) % (pool_total | int)) + 1) }}"
+        web_protection_profile: "{{ default_policy_web_profile }}"
+        comment: "{{ policy_comment }}"
+        service: "{{ default_policy_protocol }}"
+      loop: "{{ range(1, (policy_total | int) + 1) | list }}"
+      loop_control:
+        loop_var: policy_index
+        label: "{{ test_prefix }}POLICY_{{ '%03d' % policy_index }}"
+
+    - name: Remove TEST server policies
+      when:
+        - not ansible_check_mode
+        - seed_action == 'rollback'
+      tags: ['seed', 'rollback']
+      fortinet.fortiweb.fwebos_server_policy:
+        action: delete
+        name: "{{ test_prefix }}POLICY_{{ '%03d' % policy_index }}"
+        vdom: "{{ seed_vdom }}"
+      loop: "{{ range((policy_total | int), 0, -1) | list }}"
+      loop_control:
+        loop_var: policy_index
+        label: "{{ test_prefix }}POLICY_{{ '%03d' % policy_index }}"
+
+    - name: Remove TEST virtual servers
+      when:
+        - not ansible_check_mode
+        - seed_action == 'rollback'
+      tags: ['seed', 'rollback']
+      fortinet.fortiweb.fwebos_virtual_server:
+        action: delete
+        name: "{{ test_prefix }}VSERVER_{{ '%03d' % vserver_index }}"
+        vdom: "{{ seed_vdom }}"
+      loop: "{{ range((pool_total | int), 0, -1) | list }}"
+      loop_control:
+        loop_var: vserver_index
+        label: "{{ test_prefix }}VSERVER_{{ '%03d' % vserver_index }}"
+
+    - name: Remove dummy members for TEST server pools
+      when:
+        - not ansible_check_mode
+        - seed_action == 'rollback'
+      tags: ['seed', 'rollback']
+      fortinet.fortiweb.fwebos_server_pool_rule:
+        action: delete
+        table_name: "{{ test_prefix }}POOL_{{ '%03d' % pool_index }}"
+        name: "1"
+        vdom: "{{ seed_vdom }}"
+      loop: "{{ range((pool_total | int), 0, -1) | list }}"
+      loop_control:
+        loop_var: pool_index
+        label: "{{ test_prefix }}POOL_{{ '%03d' % pool_index }}"
+
+    - name: Remove TEST server pools
+      when:
+        - not ansible_check_mode
+        - seed_action == 'rollback'
+      tags: ['seed', 'rollback']
+      fortinet.fortiweb.fwebos_server_pool:
+        action: delete
+        name: "{{ test_prefix }}POOL_{{ '%03d' % pool_index }}"
+        vdom: "{{ seed_vdom }}"
+      loop: "{{ range((pool_total | int), 0, -1) | list }}"
+      loop_control:
+        loop_var: pool_index
+        label: "{{ test_prefix }}POOL_{{ '%03d' % pool_index }}"
+
+    - name: Remove TEST web protection profiles
+      when:
+        - not ansible_check_mode
+        - seed_action == 'rollback'
+      tags: ['seed', 'rollback']
+      fortinet.fortiweb.fwebos_waf_custom_policy:
+        action: delete
+        name: "{{ test_prefix }}PROFILE_{{ '%03d' % profile_index }}"
+        vdom: "{{ seed_vdom }}"
+      loop: "{{ range((profile_total | int), 0, -1) | list }}"
+      loop_control:
+        loop_var: profile_index
+        label: "{{ test_prefix }}PROFILE_{{ '%03d' % profile_index }}"
