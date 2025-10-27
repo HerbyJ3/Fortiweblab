@@ -5,59 +5,49 @@
   vars:
     api_url: "https://{{ ansible_host }}"
   tasks:
-    - name: Login to FortiWeb
+    - name: Login to FortiWeb via logincheck
       uri:
-        url: "{{ api_url }}/api/v2.0/AuthLogin"
+        url: "{{ api_url }}/logincheck"
         method: POST
         headers:
           Accept: "application/json"
-          Content-Type: "application/json"
-        body_format: json
+          Content-Type: "application/x-www-form-urlencoded"
+        body_format: form-urlencoded
         body:
           username: "{{ ansible_user }}"
           password: "{{ ansible_password }}"
         validate_certs: false
         return_content: true
+        status_code: [200, 302]  # Accept both success and redirect
       register: login_response
       no_log: true
       
-    - name: Set session cookie
+    - name: Extract cookies from login response
       set_fact:
-        session_cookie: "{{ login_response.cookies.ccsrftoken }}"
-      when: login_response.cookies is defined and login_response.cookies.ccsrftoken is defined
-      
-  tasks:
-    - name: Get system status via REST API
-      uri:
-        url: "{{ api_url }}/api/v2.0/System/Status"
-        method: GET
-        headers:
-          Accept: "application/json"
-          Authorization: "{{ fortiweb_api_key }}"
-        validate_certs: false
-        return_content: true
-      register: system_status
-      ignore_errors: true
+        auth_cookies: "{{ login_response.cookies_string | default('') }}"
+      when: login_response is success
 
-    - name: Get system time via REST API
+    - name: Get system global settings via REST API
       uri:
-        url: "{{ api_url }}/api/v2.0/System/Time"
+        url: "{{ api_url }}/api/v2.0/cmdb/system/global"
         method: GET
         headers:
           Accept: "application/json"
-          Authorization: "{{ fortiweb_api_key }}"
+          Cookie: "{{ auth_cookies }}"
+          X-CSRFTOKEN: "{{ fortiweb_api_key }}"
         validate_certs: false
         return_content: true
-      register: system_time
+      register: system_global
       ignore_errors: true
 
     - name: Get network interface info via REST API
       uri:
-        url: "{{ api_url }}/api/v2.0/System/Network/Interface"
+        url: "{{ api_url }}/api/v2.0/cmdb/system/interface"
         method: GET
         headers:
           Accept: "application/json"
-          Authorization: "{{ fortiweb_api_key }}"
+          Cookie: "{{ auth_cookies }}"
+          X-CSRFTOKEN: "{{ fortiweb_api_key }}"
         validate_certs: false
         return_content: true
       register: network_info
@@ -65,11 +55,12 @@
 
     - name: Get HA status via REST API
       uri:
-        url: "{{ api_url }}/api/v2.0/System/HA"
+        url: "{{ api_url }}/api/v2.0/cmdb/system/ha"
         method: GET
         headers:
           Accept: "application/json"
-          Authorization: "{{ fortiweb_api_key }}"
+          Cookie: "{{ auth_cookies }}"
+          X-CSRFTOKEN: "{{ fortiweb_api_key }}"
         validate_certs: false
         return_content: true
       register: ha_status
@@ -83,16 +74,13 @@
           Authentication:
             Password Auth: Enabled
             API Key Auth: Available ({{ fortiweb_api_key | truncate(10, true, '...') }})
+            Session Cookies: {{ "Present" if auth_cookies else "Not available" }}
           
-          System Status:
-          {{ system_status.json | default({}) | to_nice_json }}
-          
-          System Time:
-          {{ system_time.json | default({}) | to_nice_json }}
+          System Global Settings:
+          {{ system_global.json | default({}) | to_nice_json }}
           
           Network Interfaces:
           {{ network_info.json | default({}) | to_nice_json }}
           
           HA Status:
           {{ ha_status.json | default({}) | to_nice_json }}
-
