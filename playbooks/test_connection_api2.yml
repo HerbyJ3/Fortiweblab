@@ -1,0 +1,96 @@
+---
+- name: FortiWeb/OS status summary using REST API (DEV)
+  hosts: fortilab
+  gather_facts: no
+  vars:
+    api_url: "https://{{ ansible_host }}"
+  tasks:
+    - name: Login to FortiWeb via logincheck
+      uri:
+        url: "{{ api_url }}/logincheck"
+        method: POST
+        headers:
+          Accept: "application/json"
+          Content-Type: "application/x-www-form-urlencoded"
+        body: "username={{ ansible_user }}&secretkey={{ ansible_password }}"
+        validate_certs: false
+        return_content: true
+        status_code: [200, 302]  # Accept both success and redirect
+      register: login_response
+      no_log: true
+
+    - name: Debug login response
+      debug:
+        msg: |
+          Response headers: {{ login_response | to_nice_json }}
+        verbosity: 2
+
+    - name: Extract cookies from login response
+      set_fact:
+        auth_cookies: "{{ login_response.set_cookie | default('') }}"
+      when: login_response is success
+
+    - name: Get system global settings via REST API
+      uri:
+        url: "{{ api_url }}/api/v2.0/cmdb/system/global"
+        method: GET
+        headers:
+          Accept: "application/json"
+          Cookie: "{{ auth_cookies }}"
+          X-CSRFTOKEN: "{{ fortiweb_api_key }}"
+        validate_certs: false
+        return_content: true
+      register: system_global
+      ignore_errors: true
+
+    - name: Get network interface info via REST API
+      uri:
+        url: "{{ api_url }}/api/v2.0/cmdb/system/interface"
+        method: GET
+        headers:
+          Accept: "application/json"
+          Cookie: "{{ auth_cookies }}"
+          X-CSRFTOKEN: "{{ fortiweb_api_key }}"
+        validate_certs: false
+        return_content: true
+      register: network_info
+      ignore_errors: true
+
+    - name: Get HA status via REST API
+      uri:
+        url: "{{ api_url }}/api/v2.0/cmdb/system/ha"
+        method: GET
+        headers:
+          Accept: "application/json"
+          Cookie: "{{ auth_cookies }}"
+          X-CSRFTOKEN: "{{ fortiweb_api_key }}"
+        validate_certs: false
+        return_content: true
+      register: ha_status
+      ignore_errors: true
+
+    - name: Extract hostname (from system/global response)
+      set_fact:
+        fw_hostname: >-
+          {{ (system_global.json.results.hostname | default(system_global.json.results.get('hostname') if system_global.json.results is mapping else None) )
+             | default('N/A') }}
+
+    - name: Extract primary IP (from interface response)
+      set_fact:
+        fw_primary_ip: >-
+          {{ (network_info.json.results[0].ip | default(None))
+             | default('N/A') }}
+
+    - name: Display FortiWeb Status Summary
+      ansible.builtin.debug:
+        msg: |
+          FortiWeb Status Summary
+          ----------------------
+          Hostname: {{ fw_hostname }}
+          Primary IP: {{ fw_primary_ip }}
+          Authentication:
+            Password Auth: Enabled
+            API Key Auth: Available ({{ fortiweb_api_key | truncate(10, true, '...') }})
+            Session Cookies Present: {{ "Yes" if auth_cookies else "No" }}
+          
+          Note: Detailed raw JSON responses have been intentionally omitted.
