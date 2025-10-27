@@ -7,7 +7,7 @@ __pycache__/
 .molecule/
 
 # Ansible
-collections/ansible_collections/
+.ansible/collections/ansible_collections/
 *.retry
 
 # Secrets & local-only
