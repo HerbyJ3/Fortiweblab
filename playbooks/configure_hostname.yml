@@ -1,0 +1,14 @@
+---
+- name: Configure FortiWeb hostname via native API modules
+  hosts: fortilab
+  gather_facts: no
+  collections:
+    - fortinet.fortiweb
+  vars:
+    new_hostname: FW7
+
+  tasks:
+    - name: Ensure FortiWeb hostname is set to FW7
+      # fwebos_system_setting interacts with the FortiWeb REST API via httpapi
+      fwebos_system_setting:
+        hostname: "{{ new_hostname }}"
